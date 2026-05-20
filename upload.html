@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Загрузка - NEON SOUNDS</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav>
+        <a href="index.html" class="logo">NEON SOUNDS</a>
+        <ul>
+            <li><a href="index.html">Главная</a></li>
+            <li><a href="profile.html">Профиль</a></li>
+        </ul>
+    </nav>
+
+    <div class="container" style="max-width: 500px; margin: 0 auto;">
+        <h2>Выгрузка трека</h2>
+        <form id="uploadForm">
+            <label>Название трека:</label>
+            <input type="text" id="trackName" placeholder="Введите название..." required>
+            
+            <label>Аудиофайл (MP3):</label>
+            <input type="file" id="audioFile" accept="audio/mp3,audio/wav" required>
+            
+            <button type="submit">Загрузить в сеть</button>
+        </form>
+    </div>
+</body>
+</html>
