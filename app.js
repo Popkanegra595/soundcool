@@ -1,5 +1,10 @@
-// app.js
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Импортируем нужные модули Firebase (версия 10)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { getFirestore, collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// Ваш конфиг
 const firebaseConfig = {
   apiKey: "AIzaSyCrjswSQGWxkWKF_z1ugFRI4x-0AqVbxhY",
   authDomain: "swag-c5ed5.firebaseapp.com",
@@ -10,33 +15,126 @@ const firebaseConfig = {
   appId: "1:269038394526:web:252ac714a9de03aee96f8f",
   measurementId: "G-6GCM26CXHV"
 };
-// import { initializeApp } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js";
-// import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js";
-// import { getStorage, ref, uploadBytes } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-storage.js";
 
-// Логика UI
+// Инициализация Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const storage = getStorage(app);
+const db = getFirestore(app);
+
 document.addEventListener("DOMContentLoaded", () => {
     
-    // Обработка формы загрузки
-    const uploadForm = document.getElementById('uploadForm');
-    if(uploadForm) {
-        uploadForm.addEventListener('submit', (e) => {
+    // --- 1. ЛОГИКА АВТОРИЗАЦИИ (login.html) ---
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const trackName = document.getElementById('trackName').value;
-            const file = document.getElementById('audioFile').files[0];
-            
-            alert(`Имитация загрузки трека: ${trackName}. \nПодключите Firebase Storage для реальной загрузки!`);
-            // Здесь будет код uploadBytes(storageRef, file) из Firebase
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const btn = loginForm.querySelector('button');
+            btn.innerText = "Загрузка...";
+
+            try {
+                // Пытаемся войти
+                await signInWithEmailAndPassword(auth, email, password);
+                window.location.href = "index.html"; // Успешный вход
+            } catch (error) {
+                // Если аккаунта нет, создаем новый (Регистрация)
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+                    try {
+                        await createUserWithEmailAndPassword(auth, email, password);
+                        alert("Вы успешно зарегистрировались!");
+                        window.location.href = "index.html";
+                    } catch (regError) {
+                        alert("Ошибка регистрации: " + regError.message);
+                    }
+                } else {
+                    alert("Ошибка: " + error.message);
+                }
+            }
+            btn.innerText = "Войти / Регистрация";
         });
     }
 
-    // Обработка логина
-    const loginForm = document.getElementById('loginForm');
-    if(loginForm) {
-        loginForm.addEventListener('submit', (e) => {
+    // --- 2. ЛОГИКА ЗАГРУЗКИ ТРЕКОВ (upload.html) ---
+    const uploadForm = document.getElementById('uploadForm');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            alert("Имитация входа. Подключите Firebase Auth!");
-            window.location.href = "index.html"; // Редирект после "входа"
+            
+            // Проверяем, вошел ли пользователь
+            const user = auth.currentUser;
+            if (!user) {
+                alert("Пожалуйста, сначала войдите в аккаунт!");
+                window.location.href = "login.html";
+                return;
+            }
+
+            const trackName = document.getElementById('trackName').value;
+            const file = document.getElementById('audioFile').files[0];
+            const btn = uploadForm.querySelector('button');
+            
+            btn.innerText = "Идет выгрузка...";
+            btn.disabled = true;
+
+            try {
+                // 1. Загружаем MP3 файл в Firebase Storage
+                const storageRef = ref(storage, 'tracks/' + Date.now() + '_' + file.name);
+                await uploadBytes(storageRef, file);
+                
+                // 2. Получаем ссылку на загруженный файл
+                const downloadURL = await getDownloadURL(storageRef);
+
+                // 3. Сохраняем информацию о треке в базу данных (Firestore)
+                await addDoc(collection(db, "tracks"), {
+                    title: trackName,
+                    audioUrl: downloadURL,
+                    artist: user.email.split('@')[0], // Имя артиста - часть email
+                    timestamp: Date.now()
+                });
+
+                alert("Трек успешно выгружен в сеть!");
+                window.location.href = "index.html"; // Возвращаем на главную
+            } catch (error) {
+                alert("Ошибка выгрузки: " + error.message);
+                btn.innerText = "Загрузить в сеть";
+                btn.disabled = false;
+            }
         });
+    }
+
+    // --- 3. ЛОГИКА ОТОБРАЖЕНИЯ ТРЕКОВ (index.html) ---
+    const recommendations = document.getElementById('recommendations');
+    if (recommendations) {
+        async function loadTracks() {
+            recommendations.innerHTML = "<p>Поиск неоновых волн...</p>";
+            try {
+                // Получаем все треки из базы данных
+                const q = query(collection(db, "tracks"), orderBy("timestamp", "desc"));
+                const querySnapshot = await getDocs(q);
+                
+                recommendations.innerHTML = ""; // Очищаем
+                
+                querySnapshot.forEach((doc) => {
+                    const track = doc.data();
+                    // Добавляем карточку с плеером на страницу
+                    recommendations.innerHTML += `
+                        <div class="card">
+                            <h3>${track.title}</h3>
+                            <p style="color: #0ff; text-shadow: 0 0 5px #0ff;">Artist: ${track.artist}</p>
+                            <audio controls src="${track.audioUrl}" style="width: 100%; margin-top: 15px; border-radius: 5px; outline: none;"></audio>
+                        </div>
+                    `;
+                });
+
+                if(querySnapshot.empty) {
+                    recommendations.innerHTML = "<p>Треков пока нет. Загрузи первый!</p>";
+                }
+            } catch (error) {
+                recommendations.innerHTML = "<p>Ошибка загрузки треков.</p>";
+                console.error(error);
+            }
+        }
+        loadTracks();
     }
 });
