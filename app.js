@@ -103,38 +103,87 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // --- 3. ЛОГИКА ОТОБРАЖЕНИЯ ТРЕКОВ (index.html) ---
+ // --- 3. ЛОГИКА ОТОБРАЖЕНИЯ ТРЕКОВ НА ГЛАВНОЙ (index.html) ---
     const recommendations = document.getElementById('recommendations');
     if (recommendations) {
         async function loadTracks() {
-            recommendations.innerHTML = "<p>Поиск неоновых волн...</p>";
             try {
-                // Получаем все треки из базы данных
                 const q = query(collection(db, "tracks"), orderBy("timestamp", "desc"));
                 const querySnapshot = await getDocs(q);
-                
-                recommendations.innerHTML = ""; // Очищаем
+                recommendations.innerHTML = ""; 
                 
                 querySnapshot.forEach((doc) => {
                     const track = doc.data();
-                    // Добавляем карточку с плеером на страницу
+                    // Ссылка на профиль артиста сделана кликабельной!
                     recommendations.innerHTML += `
                         <div class="card">
                             <h3>${track.title}</h3>
-                            <p style="color: #0ff; text-shadow: 0 0 5px #0ff;">Artist: ${track.artist}</p>
-                            <audio controls src="${track.audioUrl}" style="width: 100%; margin-top: 15px; border-radius: 5px; outline: none;"></audio>
+                            <p style="color: #fff; text-shadow: var(--neon-glow);">
+                                Artist: <a href="profile.html?user=${track.artist}" style="color: inherit; text-decoration: underline;">${track.artist}</a>
+                            </p>
+                            <audio controls src="${track.audioUrl}" style="width: 100%; margin-top: 15px; border-radius: 5px;"></audio>
                         </div>
                     `;
                 });
 
                 if(querySnapshot.empty) {
-                    recommendations.innerHTML = "<p>Треков пока нет. Загрузи первый!</p>";
+                    recommendations.innerHTML = "<p>Треков пока нет.</p>";
                 }
             } catch (error) {
-                recommendations.innerHTML = "<p>Ошибка загрузки треков.</p>";
-                console.error(error);
+                console.error("Ошибка загрузки треков: ", error);
             }
         }
         loadTracks();
     }
-});
+
+    // --- 4. ЛОГИКА ПРОФИЛЯ (profile.html) ---
+    const profileTracks = document.getElementById('profileTracks');
+    if (profileTracks) {
+        // Получаем имя пользователя из URL (например: profile.html?user=DJ_Neon)
+        const urlParams = new URLSearchParams(window.location.search);
+        let profileUser = urlParams.get('user');
+
+        // Ждем, пока Firebase проверит авторизацию
+        onAuthStateChanged(auth, async (user) => {
+            // Если в ссылке нет имени артиста, показываем профиль текущего пользователя
+            if (!profileUser) {
+                if (user) {
+                    profileUser = user.email.split('@')[0];
+                } else {
+                    alert("Сначала войдите в систему!");
+                    window.location.href = "login.html";
+                    return;
+                }
+            }
+
+            // Устанавливаем имя в заголовок профиля
+            document.getElementById('profileName').innerText = profileUser;
+
+            // Ищем треки этого артиста в базе
+            try {
+                const q = query(collection(db, "tracks"), orderBy("timestamp", "desc"));
+                const querySnapshot = await getDocs(q);
+                profileTracks.innerHTML = ""; 
+                let hasTracks = false;
+                
+                querySnapshot.forEach((doc) => {
+                    const track = doc.data();
+                    if(track.artist === profileUser) {
+                        hasTracks = true;
+                        profileTracks.innerHTML += `
+                            <div class="card">
+                                <h3>${track.title}</h3>
+                                <audio controls src="${track.audioUrl}" style="width: 100%; margin-top: 15px;"></audio>
+                            </div>
+                        `;
+                    }
+                });
+
+                if(!hasTracks) {
+                    profileTracks.innerHTML = "<p>Этот артист пока ничего не выпустил.</p>";
+                }
+            } catch (error) {
+                console.error("Ошибка профиля: ", error);
+            }
+        });
+    }
