@@ -136,30 +136,55 @@ document.addEventListener("DOMContentLoaded", () => {
         loadTracks();
     }
 
-    // --- 4. ЛОГИКА ПРОФИЛЯ (profile.html) ---
+// --- 4. ЛОГИКА ПРОФИЛЯ (profile.html) ---
     const profileTracks = document.getElementById('profileTracks');
-    if (profileTracks) {
-        // Получаем имя пользователя из URL (например: profile.html?user=DJ_Neon)
+    const profileNameEl = document.getElementById('profileName');
+    const profileAvatarEl = document.getElementById('profileAvatar');
+
+    if (profileTracks && profileNameEl) {
+        // Смотрим, есть ли никнейм в ссылке (чужой профиль)
         const urlParams = new URLSearchParams(window.location.search);
         let profileUser = urlParams.get('user');
 
-        // Ждем, пока Firebase проверит авторизацию
-        onAuthStateChanged(auth, async (user) => {
-            // Если в ссылке нет имени артиста, показываем профиль текущего пользователя
-            if (!profileUser) {
+        // Функция: ставим имя, подбираем аватарку и грузим треки
+        function loadProfileData(username) {
+            // 1. Убираем надпись "Загрузка" и ставим никнейм
+            profileNameEl.innerText = username;
+
+            // 2. Магия: превращаем никнейм в число от 1 до 5 (чтобы аватар был постоянным)
+            let hash = 0;
+            for (let i = 0; i < username.length; i++) {
+                hash += username.charCodeAt(i);
+            }
+            const avatarNumber = (hash % 5) + 1; 
+
+            // 3. Показываем картинку avatar1.png, avatar2.png и т.д.
+            profileAvatarEl.src = `avatar${avatarNumber}.png`;
+            profileAvatarEl.style.display = "block";
+
+            // 4. Ищем треки этого артиста
+            fetchTracksForUser(username);
+        }
+
+        // РЕШАЕМ ПРОБЛЕМУ "ЗАГРУЗКИ"
+        if (profileUser) {
+            // Если мы перешли по ссылке на чужой профиль — грузим сразу!
+            loadProfileData(profileUser);
+        } else {
+            // Если мы нажали кнопку "Профиль" в меню — ждем проверки авторизации
+            onAuthStateChanged(auth, (user) => {
                 if (user) {
                     profileUser = user.email.split('@')[0];
+                    loadProfileData(profileUser);
                 } else {
                     alert("Сначала войдите в систему!");
                     window.location.href = "login.html";
-                    return;
                 }
-            }
+            });
+        }
 
-            // Устанавливаем имя в заголовок профиля
-            document.getElementById('profileName').innerText = profileUser;
-
-            // Ищем треки этого артиста в базе
+        // Функция запроса треков из базы данных
+        async function fetchTracksForUser(username) {
             try {
                 const q = query(collection(db, "tracks"), orderBy("timestamp", "desc"));
                 const querySnapshot = await getDocs(q);
@@ -168,22 +193,23 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 querySnapshot.forEach((doc) => {
                     const track = doc.data();
-                    if(track.artist === profileUser) {
+                    if(track.artist === username) {
                         hasTracks = true;
                         profileTracks.innerHTML += `
                             <div class="card">
                                 <h3>${track.title}</h3>
-                                <audio controls src="${track.audioUrl}" style="width: 100%; margin-top: 15px;"></audio>
+                                <audio controls src="${track.audioUrl}" style="width: 100%; margin-top: 15px; border-radius: 5px; outline: none;"></audio>
                             </div>
                         `;
                     }
                 });
 
                 if(!hasTracks) {
-                    profileTracks.innerHTML = "<p>Этот артист пока ничего не выпустил.</p>";
+                    profileTracks.innerHTML = "<p style='color: #888;'>Этот артист пока ничего не выпустил.</p>";
                 }
             } catch (error) {
                 console.error("Ошибка профиля: ", error);
+                profileTracks.innerHTML = "<p style='color: red;'>Ошибка при загрузке треков.</p>";
             }
-        });
+        }
     }
