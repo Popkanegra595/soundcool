@@ -6,35 +6,35 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <nav>
+
+    <!-- Верх с Логотипом и Поиском -->
+    <header class="top-header">
         <a href="index.html" class="logo">SWAG SOUND</a>
-        <ul>
-            <li><a href="index.html">Главная</a></li>
-            <li><a href="upload.html">Загрузить</a></li>
-            <li><a href="profile.html">Профиль</a></li>
-            <li><a href="login.html">Войти</a></li>
-        </ul>
-    </nav>
+        <input type="text" id="searchInput" placeholder="Поиск треков или артистов..." class="search-bar">
+    </header>
 
+    <!-- Главная лента (теперь вертикальная) -->
     <div class="container">
-        <h2>Рекомендации</h2>
-        <div class="grid" id="recommendations">
-            
-            <div class="card">
-                <h3>Track Name 1</h3>
-                <p>Artist: Unknown</p>
-                <button>Play</button>
-            </div>
-        </div>
-
-        <h2>Популярные Артисты</h2>
-        <div class="grid" id="popular-artists">
-            <div class="card">
-                <h3>DJ PIZDA</h3>
-                <p>1488k followers</p>
-            </div>
+        <h2>Лента</h2>
+        <div class="feed" id="recommendations">
+            <!-- Здесь пусто. Карточки появятся плавно из базы данных -->
+            <p id="loadingMsg" style="text-align: center; color: #888;">Загрузка свежего свэга...</p>
         </div>
     </div>
+
+    <!-- Нижняя панель управления -->
+    <nav class="bottom-nav">
+        <a href="index.html" class="nav-item">Главная</a>
+        
+        <!-- Центральная кнопка профиля -->
+        <a href="login.html" class="nav-item nav-profile" id="bottomNavProfile">
+            <img id="navAvatar" src="" alt="" style="display: none;">
+            <div id="navAvatarPlaceholder" style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #fff; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; font-size: 24px;">?</div>
+            <span id="navName">Войти</span>
+        </a>
+
+        <a href="upload.html" class="nav-item">Загрузить</a>
+    </nav>
 
     <script type="module" src="app.js"></script>
 </body>
