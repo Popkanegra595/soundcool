@@ -19,9 +19,43 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Ждем загрузки страницы
+// Глобальная переменная для хранения всех треков (нужна для поиска)
+let allTracks = [];
+
 document.addEventListener("DOMContentLoaded", () => {
     
+    // --- ГЛОБАЛЬНАЯ ЛОГИКА: НИЖНЯЯ ПАНЕЛЬ ПРОФИЛЯ ---
+    const bottomNavProfile = document.getElementById('bottomNavProfile');
+    if (bottomNavProfile) {
+        onAuthStateChanged(auth, (user) => {
+            const navAvatar = document.getElementById('navAvatar');
+            const navPlaceholder = document.getElementById('navAvatarPlaceholder');
+            const navName = document.getElementById('navName');
+
+            if (user) {
+                // Если пользователь вошел
+                const username = user.email.split('@')[0];
+                navName.innerText = username;
+                bottomNavProfile.href = "profile.html"; // Меняем ссылку на профиль
+
+                // Высчитываем его аватарку
+                let hash = 0;
+                for (let i = 0; i < username.length; i++) { hash += username.charCodeAt(i); }
+                const avatarNumber = (hash % 5) + 1; 
+
+                navAvatar.src = `avatar${avatarNumber}.png`;
+                navAvatar.style.display = "block";
+                navPlaceholder.style.display = "none";
+            } else {
+                // Если гость
+                navName.innerText = "Войти";
+                bottomNavProfile.href = "login.html";
+                navAvatar.style.display = "none";
+                navPlaceholder.style.display = "flex";
+            }
+        });
+    }
+
     // --- РАЗДЕЛ 1. ЛОГИКА АВТОРИЗАЦИИ (login.html) ---
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
@@ -34,9 +68,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             try {
                 await signInWithEmailAndPassword(auth, email, password);
-                window.location.href = "index.html"; // Успешный вход
+                window.location.href = "index.html"; 
             } catch (error) {
-                // Если аккаунта нет - регистрируем
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
                     try {
                         await createUserWithEmailAndPassword(auth, email, password);
@@ -53,37 +86,65 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // --- РАЗДЕЛ 2. ЛОГИКА ГЛАВНОЙ СТРАНИЦЫ (index.html) ---
+    // --- РАЗДЕЛ 2. ЛОГИКА ГЛАВНОЙ СТРАНИЦЫ И ПОИСКА (index.html) ---
     const recommendations = document.getElementById('recommendations');
+    const searchInput = document.getElementById('searchInput');
+
     if (recommendations) {
+        // Функция отрисовки карточек на экран
+        function renderTracks(tracksToRender) {
+            recommendations.innerHTML = ""; // Очищаем ленту
+            
+            if(tracksToRender.length === 0) {
+                recommendations.innerHTML = "<p style='text-align:center;'>Ничего не найдено.</p>";
+                return;
+            }
+
+            tracksToRender.forEach((track) => {
+                recommendations.innerHTML += `
+                    <div class="card">
+                        <h3>${track.title}</h3>
+                        <p style="color: #fff; text-shadow: var(--neon-glow);">
+                            Artist: <a href="profile.html?user=${track.artist}" style="color: inherit; text-decoration: underline;">${track.artist}</a>
+                        </p>
+                        <audio controls src="${track.audioUrl}" style="width: 100%; margin-top: 15px; border-radius: 5px; outline: none;"></audio>
+                    </div>
+                `;
+            });
+        }
+
+        // Загрузка треков из базы
         async function loadTracks() {
             try {
                 const q = query(collection(db, "tracks"), orderBy("timestamp", "desc"));
                 const querySnapshot = await getDocs(q);
-                recommendations.innerHTML = ""; 
                 
+                allTracks = []; // Очищаем массив
                 querySnapshot.forEach((doc) => {
-                    const track = doc.data();
-                    recommendations.innerHTML += `
-                        <div class="card">
-                            <h3>${track.title}</h3>
-                            <p style="color: #fff; text-shadow: var(--neon-glow);">
-                                Artist: <a href="profile.html?user=${track.artist}" style="color: inherit; text-decoration: underline;">${track.artist}</a>
-                            </p>
-                            <audio controls src="${track.audioUrl}" style="width: 100%; margin-top: 15px; border-radius: 5px;"></audio>
-                        </div>
-                    `;
+                    allTracks.push(doc.data());
                 });
 
-                if(querySnapshot.empty) {
-                    recommendations.innerHTML = "<p>Треков пока нет. Отправь первый!</p>";
-                }
+                renderTracks(allTracks); // Рисуем все треки
             } catch (error) {
                 console.error("Ошибка загрузки треков: ", error);
                 recommendations.innerHTML = "<p>Ошибка связи с базой данных.</p>";
             }
         }
+        
         loadTracks();
+
+        // Логика ПОИСКА (живой поиск при вводе текста)
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const searchText = e.target.value.toLowerCase();
+                // Фильтруем по названию трека ИЛИ по имени артиста
+                const filteredTracks = allTracks.filter(track => 
+                    track.title.toLowerCase().includes(searchText) || 
+                    track.artist.toLowerCase().includes(searchText)
+                );
+                renderTracks(filteredTracks);
+            });
+        }
     }
 
     // --- РАЗДЕЛ 3. ЛОГИКА ПРОФИЛЯ (profile.html) ---
@@ -95,28 +156,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const urlParams = new URLSearchParams(window.location.search);
         let profileUser = urlParams.get('user');
 
-        // Функция: ставим имя, подбираем аватарку и грузим треки
         function loadProfileData(username) {
             profileNameEl.innerText = username;
-
-            // Вычисляем аватарку от 1 до 5
             let hash = 0;
-            for (let i = 0; i < username.length; i++) {
-                hash += username.charCodeAt(i);
-            }
+            for (let i = 0; i < username.length; i++) { hash += username.charCodeAt(i); }
             const avatarNumber = (hash % 5) + 1; 
-
             profileAvatarEl.src = `avatar${avatarNumber}.png`;
             profileAvatarEl.style.display = "block";
-
             fetchTracksForUser(username);
         }
 
-        // Если перешли по ссылке на чужой профиль
         if (profileUser) {
             loadProfileData(profileUser);
         } else {
-            // Если нажали "Профиль" в меню — ждем проверки авторизации
             onAuthStateChanged(auth, (user) => {
                 if (user) {
                     profileUser = user.email.split('@')[0];
@@ -128,7 +180,6 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Загрузка треков конкретного юзера
         async function fetchTracksForUser(username) {
             try {
                 const q = query(collection(db, "tracks"), orderBy("timestamp", "desc"));
@@ -154,9 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             } catch (error) {
                 console.error("Ошибка профиля: ", error);
-                profileTracks.innerHTML = "<p style='color: red;'>Ошибка при загрузке треков.</p>";
             }
         }
     }
-
-}); // <-- ВОТ ЭТИ СКОБКИ У ТЕБЯ ПОТЕРЯЛИСЬ, ТЕПЕРЬ ОНИ НА МЕСТЕ!
+});
